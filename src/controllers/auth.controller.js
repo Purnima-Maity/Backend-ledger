@@ -1,6 +1,7 @@
 import userModel from '../models/user.model.js';
 import jwt from 'jsonwebtoken';
-import sendRegistrationEmail from '../services/email.service.js'
+import tokenBlacklistModel from '../models/blackList.model.js';
+import {sendRegistrationEmail} from '../services/email.service.js'
 // Register a new user
 export const registerUser = async (req, res) => {
   try {
@@ -19,27 +20,28 @@ export const registerUser = async (req, res) => {
       password,
       name
     });
-    const token=jwt.sign({userId:user._id},
+    await sendRegistrationEmail(user.email, user.name)
+
+    const token = jwt.sign({ userId: user._id },
       process.env.JWT_SECRET_KEY,
       {
-        expiresIn:"3d"
+        expiresIn: "3d"
       }
     )
-    res.cookie("token",token)
-    res.status(201).json({ 
+    res.cookie("token", token)
+    res.status(201).json({
       message: 'User registered successfully',
-      user:{
-        _id:user._id,
-        email:user.email,
-        name:user.name
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.name
       },
       token
-     });
+    });
   } catch (error) {
     console.error("Registration Error:", error); // This will show the real problem in your console
     res.status(500).json({ message: error.message });
   }
-  await sendRegistrationEmail(user.email,user.name)
 };
 // Login user
 export const loginUser = async (req, res) => {
@@ -57,18 +59,29 @@ export const loginUser = async (req, res) => {
     }
     // Create JWT token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, { expiresIn: '3d' });
-    res.cookie("token",token)
-    res.status(200).json({ 
+    res.cookie("token", token)
+    res.status(200).json({
       message: 'User logged in successfully',
-      user:{
-        _id:user._id,
-        email:user.email,
-        name:user.name
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.name
       },
       token
-     });
+    });
   } catch (error) {
-        console.error("login Error:", error); // This will show the real problem in your console
+    console.error("login Error:", error); // This will show the real problem in your console
     res.status(500).json({ message: error.message });
   }
+};
+
+//logout user
+export const logoutUser = async (req, res) => {
+  const token = req.cookies.token || req.header.authorization?.split(" ")[1]; 
+  if(!token) {
+    return res.status(401).json({ message: 'Not authorized, token is missing' });
+  }
+  res.clearCookie('token');
+  await tokenBlacklistModel.create({ token });
+  res.status(200).json({ message: 'User logged out successfully' });
 };
